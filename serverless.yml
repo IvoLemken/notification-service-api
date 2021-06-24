@@ -1,0 +1,140 @@
+service: notification-service-api
+frameworkVersion: '2'
+
+custom:
+  bucketName: sms-log-bucket #set a unique bucket name
+  firehoseName: smsLogFirehose
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  lambdaHashingVersion: '20201221'
+  profile: default
+  region: eu-central-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+              - sns:SetSMSAttributes
+              - sns:Publish
+              - firehose:PutRecord
+              - athena:*
+              - s3:*
+              - glue:GetTable
+          Resource: '*'
+  apiGateway:
+    apiKeys:
+      - basicApiKey
+    resourcePolicy:
+      - Effect: Allow
+        Principal: "*"
+        Action: execute-api:Invoke
+        Resource:
+          - execute-api:/*/*/*
+        Condition:
+          IpAddress:
+            aws:SourceIp:
+              - "11.112.113.114" #Set IP that is allowed to invoke the APIs
+
+functions:
+  sendUpdate:
+      handler: sendUpdate.handler
+      environment:
+        FIREHOSE_NAME: ${self:custom.firehoseName}
+      events:
+          - http:
+                path: send-update
+                method: POST
+                cors: true
+                private: true
+  retrieveSentUpdates:
+      handler: retrieveSentUpdates.handler
+      timeout: 30
+      environment:
+        BUCKET_NAME: ${self:custom.bucketName}
+      events:
+          - http:
+                path: retrieve-sent-updates
+                method: POST
+                cors: true
+                private: true
+
+resources:
+  Resources:
+    SmsLogBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucketName}
+        AccessControl: Private
+    FirehoseRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: smsLog-FirehoseRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - firehose.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: root
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action: 
+                    - 's3:AbortMultipartUpload'
+                    - 's3:GetBucketLocation'
+                    - 's3:GetObject'
+                    - 's3:ListBucket'
+                    - 's3:ListBucketMultipartUploads'
+                    - 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${self:custom.bucketName}'
+                    - !Sub 'arn:aws:s3:::${self:custom.bucketName}*'
+    SmsLogFirehose:
+      Type: AWS::KinesisFirehose::DeliveryStream
+      Properties:
+        DeliveryStreamName: ${self:custom.firehoseName}
+        S3DestinationConfiguration:
+          BucketARN:
+            !Sub 'arn:aws:s3:::${self:custom.bucketName}'
+          BufferingHints:
+            IntervalInSeconds: 300
+            SizeInMBs: 5
+          CompressionFormat: UNCOMPRESSED
+          Prefix: firehose/
+          RoleARN:
+            !GetAtt [FirehoseRole, Arn]
+
+    GlueDatabase:
+      Type: AWS::Glue::Database
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseInput:
+          Name: sms_log_db
+
+    GlueTable:
+      Type: AWS::Glue::Table
+      Properties:
+        CatalogId: !Ref AWS::AccountId
+        DatabaseName: !Ref GlueDatabase
+        TableInput:
+          Name: sms_table
+          TableType: EXTERNAL_TABLE
+          StorageDescriptor:
+            Location: !Sub s3://${self:custom.bucketName}/firehose/
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+            Columns:
+              - Name: message
+                Type: string
+              - Name: phonenumber
+                Type: string
+              - Name: timestamp
+                Type: string
