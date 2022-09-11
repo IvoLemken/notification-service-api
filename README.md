@@ -11,7 +11,7 @@ authorName: 'Ivo Lemken'
 
 ## Introduction
 
-This is my take on a system to send sms updates to customers and log the messages that were sent. After setting your own unique bucket name and sourceIp (access to the APIs is restricted to the IPs in the list) in the serverless.yml file, the code can be deployed with the Serverless Framework, using the command below.
+This is my take on a system to send sms updates to customers and log the messages that were sent in the AWS environment, using the serverless framework for deployment. After setting your own unique bucket name and sourceIp (access to the APIs is restricted to the IPs in the list) in the serverless.yml file, the code can be deployed with the Serverless Framework, using the command below.
 
 ```
 $ serverless deploy
@@ -40,7 +40,9 @@ You can get all messages (in JSON format) sent to a phoneNumber using the retrie
 }
 ```
 
+## Change log
+- Implemented data encryption & minor updates to adjust to changes in the serverless framework
+
 ## Possible improvements
-- Data encryption in storage and communication
 - More restrictive IAM roles per function
-- Partitioning in the athena database for faster & cheaper data retrieval with large data collections
+- ~~Partitioning in the athena database for faster & cheaper data retrieval with large data collections~~ (Currently Kinesis Firehose does not allow for this kind of partitioning without setting up a separate bucket for each partition)

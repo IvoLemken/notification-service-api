@@ -13,7 +13,7 @@ exports.handler = async event => {
         return Responses._400({ message: 'Missing or incomplete body' });
     }
 
-    const query = `SELECT phonenumber, message, timestamp FROM "sms_log_db"."sms_table" WHERE "phonenumber" = '${body.phoneNumber}';`;
+    const query = `SELECT phonenumber, message, timestamp FROM "${process.env.DB_NAME}"."${process.env.TABLE_NAME}" WHERE "phonenumber" = '${body.phoneNumber}';`;
 
     try {
         results = await athena.query(query);

@@ -1,14 +1,15 @@
 service: notification-service-api
-frameworkVersion: '2'
+frameworkVersion: '3'
 
 custom:
-  bucketName: sms-log-bucket #set a unique bucket name
+  bucketName: ivos-sms-log-bucket #set a unique bucket name
   firehoseName: smsLogFirehose
+  dbName: sms_log_db
+  tableName: sms_table
 
 provider:
   name: aws
   runtime: nodejs12.x
-  lambdaHashingVersion: '20201221'
   profile: default
   region: eu-central-1
   iam:
@@ -52,7 +53,8 @@ functions:
       handler: retrieveSentUpdates.handler
       timeout: 30
       environment:
-        BUCKET_NAME: ${self:custom.bucketName}
+        DB_NAME: ${self:custom.dbName}
+        TABLE_NAME: ${self:custom.tableName}
       events:
           - http:
                 path: retrieve-sent-updates
@@ -115,7 +117,7 @@ resources:
       Properties:
         CatalogId: !Ref AWS::AccountId
         DatabaseInput:
-          Name: sms_log_db
+          Name: ${self:custom.dbName}
 
     GlueTable:
       Type: AWS::Glue::Table
@@ -123,15 +125,16 @@ resources:
         CatalogId: !Ref AWS::AccountId
         DatabaseName: !Ref GlueDatabase
         TableInput:
-          Name: sms_table
+          Name: ${self:custom.tableName}
           TableType: EXTERNAL_TABLE
+          Parameters: { "has_encrypted_data" : "true" }
           StorageDescriptor:
             Location: !Sub s3://${self:custom.bucketName}/firehose/
             InputFormat: org.apache.hadoop.mapred.TextInputFormat
             OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
             SerdeInfo:
               SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
-            Columns:
+            Columns: #As column names are not set via environment variables, any name changes should also be updated in the lambda functions
               - Name: message
                 Type: string
               - Name: phonenumber

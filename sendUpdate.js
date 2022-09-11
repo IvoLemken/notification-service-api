@@ -13,7 +13,7 @@ exports.handler = async event => {
         return Responses._400({ message: 'Missing or incomplete body' });
     }
 
-    const AttributeParams = {
+    const attributeParams = {
         attributes: {
             DefaultSMSType: 'Promotional',
         },
@@ -35,7 +35,7 @@ exports.handler = async event => {
     };
 
     try {
-        await SNS.setSMSAttributes(AttributeParams).promise();
+        await SNS.setSMSAttributes(attributeParams).promise();
         await SNS.publish(messageParams).promise();
         await fireHose.putRecord(loggingParams, function (error, data) {
             if (error) {
